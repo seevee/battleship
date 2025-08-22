@@ -59,11 +59,10 @@ defmodule Battleship do
           IO.puts(x <> " " <> y)
         end)
     end
-
-    # Enum.zip_with(state.boards, fn [x, y] -> IO.puts(x <> " " <> y) end)
   end
 
   def process_turn(state) do
+    draw_state(state)
     input = String.upcase(IO.gets("Player " <> to_string(active_player(state)) <> " move: "))
 
     # Input validation
@@ -75,7 +74,6 @@ defmodule Battleship do
 
       state = update_in(state.moves, &[{y, x} | &1])
 
-      draw_state(state)
       process_turn(state)
     else
       IO.puts("Invalid move - Try again")
@@ -84,15 +82,7 @@ defmodule Battleship do
   end
 
   def play(state \\ load_state()) do
-    draw_state(state)
-
-    case process_turn(state) do
-      :ok ->
-        IO.puts("Game Over")
-
-      _ ->
-        nil
-    end
+    process_turn(state)
   end
 end
 
