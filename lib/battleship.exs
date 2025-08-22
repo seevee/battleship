@@ -12,31 +12,43 @@ defmodule Battleship do
     }
   end
 
-  def load_state(file \\ "state.txt") do
-    file |> File.stream!() |> parse_state
+  def load_state(file_path \\ "state.txt") do
+    file_path |> File.stream!() |> parse_state
   end
 
   def active_player(state) do
     Integer.mod(length(state.moves), 2) + 1
   end
 
-  def fog_overlay(moves, board) do
+  def overlay(moves, board, fog \\ true) do
     n = length(board)
 
     Enum.map(0..(n - 1), fn y ->
-      Enum.map(0..(n - 1), fn x ->
-        if Enum.member?(moves, {y, x}) do
-          case String.at(Enum.at(board, y), x) do
-            "." ->
-              "O"
+      Enum.reduce(0..(n - 1), "", fn x, acc ->
+        acc <>
+          if Enum.member?(moves, {y, x}) do
+            case String.at(Enum.at(board, y), x) do
+              "." ->
+                "*"
 
-            _ ->
-              "X"
+              _ ->
+                "#"
+            end
+          else
+            if fog do
+              "~"
+            else
+              String.at(Enum.at(board, y), x)
+            end
           end
-        else
-          "~"
-        end
       end)
+    end)
+  end
+
+  def draw_boards(overlays) do
+    # stdio output - draw line by line
+    Enum.zip_with(overlays, fn [p1_line, p2_line] ->
+      IO.puts(p1_line <> " " <> p2_line)
     end)
   end
 
@@ -46,18 +58,16 @@ defmodule Battleship do
 
     case active_player(state) do
       1 ->
-        overlay = fog_overlay(p2, List.last(state.boards))
-
-        Enum.zip_with([List.first(state.boards), Enum.map(overlay, &Enum.join/1)], fn [x, y] ->
-          IO.puts(x <> " " <> y)
-        end)
+        draw_boards([
+          overlay(p1, List.first(state.boards), false),
+          overlay(p2, List.last(state.boards), true)
+        ])
 
       2 ->
-        overlay = fog_overlay(p2, List.first(state.boards))
-
-        Enum.zip_with([Enum.map(overlay, &Enum.join/1), List.last(state.boards)], fn [x, y] ->
-          IO.puts(x <> " " <> y)
-        end)
+        draw_boards([
+          overlay(p2, List.first(state.boards), true),
+          overlay(p1, List.last(state.boards), false)
+        ])
     end
   end
 
@@ -65,7 +75,7 @@ defmodule Battleship do
     draw_state(state)
     input = String.upcase(IO.gets("Player " <> to_string(active_player(state)) <> " move: "))
 
-    # Input validation
+    # player input validation
     if String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
       {row, col} = String.split_at(input, 1)
 
