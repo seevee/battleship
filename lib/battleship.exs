@@ -20,11 +20,19 @@ defmodule Battleship do
     Integer.mod(length(state.moves), 2) + 1
   end
 
-  def fog_overlay(moves, n) do
+  def fog_overlay(moves, board) do
+    n = length(board)
+
     Enum.map(0..(n - 1), fn y ->
       Enum.map(0..(n - 1), fn x ->
         if Enum.member?(moves, {y, x}) do
-          "X"
+          case String.at(Enum.at(board, y), x) do
+            "." ->
+              "O"
+
+            _ ->
+              "X"
+          end
         else
           "~"
         end
@@ -32,30 +40,27 @@ defmodule Battleship do
     end)
   end
 
-  def move_overlay(state) do
+  def draw_state(state) do
     # p1 and p2 alternate for both players
     {p1, p2} = {Enum.take_every(state.moves, 2), Enum.drop_every(state.moves, 2)}
-    IO.puts(inspect(p1))
-    IO.puts(inspect(p2))
 
     case active_player(state) do
       1 ->
-        overlay = fog_overlay(p2, 10)
+        overlay = fog_overlay(p2, List.last(state.boards))
 
-        IO.puts(inspect(overlay))
-        # draw fog for enemy, hits and misses for enemy and self
-        nil
+        Enum.zip_with([List.first(state.boards), Enum.map(overlay, &Enum.join/1)], fn [x, y] ->
+          IO.puts(x <> " " <> y)
+        end)
 
       2 ->
-        overlay = fog_overlay(p2, 10)
+        overlay = fog_overlay(p2, List.first(state.boards))
 
-        IO.puts(inspect(overlay))
-        nil
+        Enum.zip_with([Enum.map(overlay, &Enum.join/1), List.last(state.boards)], fn [x, y] ->
+          IO.puts(x <> " " <> y)
+        end)
     end
-  end
 
-  def draw_state(state) do
-    Enum.zip_with(state.boards, fn [x, y] -> IO.puts(x <> " " <> y) end)
+    # Enum.zip_with(state.boards, fn [x, y] -> IO.puts(x <> " " <> y) end)
   end
 
   def process_turn(state) do
@@ -71,7 +76,6 @@ defmodule Battleship do
       state = update_in(state.moves, &[{y, x} | &1])
 
       draw_state(state)
-      move_overlay(state)
       process_turn(state)
     else
       IO.puts("Invalid move - Try again")
