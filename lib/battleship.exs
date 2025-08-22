@@ -25,65 +25,63 @@ defmodule Battleship do
 
     Enum.map(0..(n - 1), fn y ->
       Enum.reduce(0..(n - 1), "", fn x, acc ->
-        acc <>
-          if Enum.member?(moves, {y, x}) do
-            case String.at(Enum.at(board, y), x) do
-              "." ->
-                "*"
-
-              _ ->
-                "#"
-            end
-          else
-            if fog do
-              "~"
-            else
-              String.at(Enum.at(board, y), x)
-            end
-          end
+        acc <> overlay_string(moves, board, fog, {y, x})
       end)
     end)
   end
 
+  def index_string(board, {y, x}) do
+    String.at(Enum.at(board, y), x)
+  end
+
+  def overlay_string(moves, board, fog, {y, x}) do
+    if Enum.member?(moves, {y, x}) do
+      case index_string(board, {y, x}) do
+        "." ->
+          "*"
+
+        _ ->
+          "#"
+      end
+    else
+      (fog && "~") || index_string(board, {y, x})
+    end
+  end
+
+  # stdio output - draw line by line
   def draw_boards(overlays) do
-    # stdio output - draw line by line
     Enum.zip_with(overlays, fn [p1_line, p2_line] ->
       IO.puts(p1_line <> " " <> p2_line)
     end)
   end
 
   def draw_state(state) do
-    # p1 and p2 alternate for both players
     {p1, p2} = {Enum.take_every(state.moves, 2), Enum.drop_every(state.moves, 2)}
+    [b1, b2] = state.boards
 
-    case active_player(state) do
-      1 ->
-        draw_boards([
-          overlay(p1, List.first(state.boards), false),
-          overlay(p2, List.last(state.boards), true)
-        ])
+    player = active_player(state)
 
-      2 ->
-        draw_boards([
-          overlay(p2, List.first(state.boards), true),
-          overlay(p1, List.last(state.boards), false)
-        ])
-    end
+    draw_boards([
+      overlay(p2, b1, player != 1),
+      overlay(p1, b2, player != 2)
+    ])
   end
 
   def process_turn(state) do
     draw_state(state)
-    input = String.upcase(IO.gets("Player " <> to_string(active_player(state)) <> " move: "))
+
+    player = active_player(state) |> to_string()
+
+    input = IO.gets("Player " <> player <> " move: ") |> String.upcase()
 
     # player input validation
     if String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
       {row, col} = String.split_at(input, 1)
 
       {y, x} =
-        {:binary.first(row) - 65, String.to_integer(String.trim(col)) - 1}
+        {:binary.first(row) - 65, (String.trim(col) |> String.to_integer()) - 1}
 
-      state = update_in(state.moves, &[{y, x} | &1])
-
+      state = update_in(state.moves, &(&1 ++ [{y, x}]))
       process_turn(state)
     else
       IO.puts("Invalid move - Try again")
