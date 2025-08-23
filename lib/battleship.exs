@@ -1,4 +1,11 @@
 defmodule Battleship do
+  def parse_move(move) do
+    move
+    |> String.split()
+    |> Enum.map(&String.to_integer/1)
+    |> List.to_tuple()
+  end
+
   def load_state(file_path \\ "state.txt") do
     file =
       file_path
@@ -19,15 +26,7 @@ defmodule Battleship do
       ],
       moves:
         moves
-        |> Enum.reduce([], fn move, acc ->
-          [
-            move
-            |> String.split()
-            |> Enum.map(&String.to_integer/1)
-            |> List.to_tuple()
-            | acc
-          ]
-        end)
+        |> Enum.reduce([], fn move, acc -> [parse_move(move) | acc] end)
         |> Enum.reverse(),
       file_path: file_path
     }
@@ -41,7 +40,7 @@ defmodule Battleship do
   end
 
   def active_player(state) do
-    Integer.mod(length(state.moves), 2) + 1
+    state.moves |> length() |> Integer.mod(2) |> Kernel.+(1)
   end
 
   def cell(board, {y, x}) do
@@ -63,16 +62,6 @@ defmodule Battleship do
     format_string(str, {4, 3, 3}, {0, 0, 1})
   end
 
-  def overlay(moves, board, fog) do
-    range = 0..(length(board) - 1)
-
-    Enum.map(range, fn y ->
-      Enum.reduce(range, "", fn x, acc ->
-        acc <> overlay(moves, board, fog, {y, x})
-      end)
-    end)
-  end
-
   def overlay(moves, board, fog, move) do
     char = cell(board, move)
 
@@ -86,17 +75,31 @@ defmodule Battleship do
     end
   end
 
+  def overlay(moves, board, fog) do
+    range =
+      board
+      |> length()
+      |> Kernel.-(1)
+      |> then(&(0..&1))
+
+    Enum.map(range, fn y ->
+      Enum.reduce(range, "", fn x, acc ->
+        acc <> overlay(moves, board, fog, {y, x})
+      end)
+    end)
+  end
+
   def draw(state) do
     [p1, p2] = player_moves(state)
     [b1, b2] = state.boards
+    [f1, f2] = state |> active_player() |> then(&[&1 != 1, &1 != 2])
 
-    player = active_player(state)
-
-    [
-      overlay(p2, b1, player != 1),
-      overlay(p1, b2, player != 2)
+    overlays = [
+      overlay(p2, b1, f1),
+      overlay(p1, b2, f2)
     ]
-    |> Enum.zip_with(fn [o1_line, o2_line] ->
+
+    Enum.zip_with(overlays, fn [o1_line, o2_line] ->
       IO.puts(o1_line <> " " <> o2_line)
     end)
   end
@@ -122,10 +125,10 @@ defmodule Battleship do
       move =
         {
           :binary.first(row) - 65,
-          (col |> String.trim() |> String.to_integer()) - 1
+          col |> String.trim() |> String.to_integer() |> Kernel.-(1)
         }
 
-      previous_moves = player_moves(state) |> Enum.at(active_player(state) - 1)
+      previous_moves = state |> player_moves() |> Enum.at(player - 1)
 
       cond do
         move in previous_moves ->
@@ -133,7 +136,12 @@ defmodule Battleship do
           process_turn(state)
 
         true ->
-          case state.boards |> Enum.at(Integer.mod(player, 2)) |> cell(move) do
+          enemy_index = Integer.mod(player, 2)
+
+          state.boards
+          |> Enum.at(enemy_index)
+          |> cell(move)
+          |> case do
             "." -> fmt("MISS", :miss)
             _ -> fmt("HIT", :hit)
           end
