@@ -125,15 +125,23 @@ defmodule Battleship do
           (col |> String.trim() |> String.to_integer()) - 1
         }
 
-      case state.boards |> Enum.at(Integer.mod(player, 2)) |> cell(move) do
-        "." -> fmt("MISS", :miss)
-        _ -> fmt("HIT", :hit)
+      previous_moves = player_moves(state) |> Enum.at(active_player(state) - 1)
+
+      cond do
+        move in previous_moves ->
+          IO.puts("Move already made - Try again")
+          process_turn(state)
+
+        true ->
+          case state.boards |> Enum.at(Integer.mod(player, 2)) |> cell(move) do
+            "." -> fmt("MISS", :miss)
+            _ -> fmt("HIT", :hit)
+          end
+          |> IO.puts()
+
+          state = update_in(state.moves, &(&1 ++ [move]))
+          process_turn(state)
       end
-      |> IO.puts()
-
-      state = update_in(state.moves, &(&1 ++ [move]))
-
-      process_turn(state)
     else
       IO.puts("Invalid move - Try again")
       process_turn(state)
