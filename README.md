@@ -1,21 +1,15 @@
 # Battleship
 
-**TODO: Add description**
+## You asked, and we listened
+
+Now you can finally play battleship, with yourself, in your terminal!
+
+## Running
+
+```
+elixir lib/battleship.exs
+```
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `battleship` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:battleship, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/battleship>.
-
+Don't!
