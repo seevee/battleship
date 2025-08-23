@@ -39,14 +39,26 @@ defmodule Battleship do
     if Enum.member?(moves, move) do
       case cell(board, move) do
         "." ->
-          "*"
+          fmt_miss("*")
 
         _ ->
-          "#"
+          fmt_hit("#")
       end
     else
       (fog && "~") || cell(board, move)
     end
+  end
+
+  def fmt(str, {r1, g1, b1}, {r2, g2, b2}) do
+    IO.ANSI.color(r1, g1, b1) <> IO.ANSI.color_background(r2, g2, b2) <> str <> IO.ANSI.reset()
+  end
+
+  def fmt_hit(str) do
+    fmt(str, {4, 4, 0}, {3, 0, 0})
+  end
+
+  def fmt_miss(str) do
+    fmt(str, {4, 3, 3}, {0, 0, 1})
   end
 
   # stdio output - draw line by line
@@ -84,8 +96,8 @@ defmodule Battleship do
 
       result =
         case cell(elem(state.boards, Integer.mod(player, 2)), move) do
-          "." -> "MISS"
-          _ -> "HIT"
+          "." -> fmt_miss("MISS")
+          _ -> fmt_hit("HIT")
         end
 
       IO.puts(result)
