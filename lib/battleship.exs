@@ -1,13 +1,14 @@
 defmodule Battleship do
   def parse_state(raw_file) do
     file = Enum.map(raw_file, &String.trim/1)
-    {boards, moves} = Enum.split(file, 21)
+    n = List.first(file) |> String.length()
+    {boards, moves} = Enum.split(file, 2 * n + 1)
 
     %{
-      boards: [
-        Enum.take(boards, 10),
-        Enum.take(boards, -10)
-      ],
+      boards: {
+        Enum.take(boards, n),
+        Enum.take(boards, -n)
+      },
       moves: moves
     }
   end
@@ -20,23 +21,23 @@ defmodule Battleship do
     Integer.mod(length(state.moves), 2) + 1
   end
 
-  def overlay(moves, board, fog \\ true) do
+  def cell(board, {y, x}) do
+    String.at(Enum.at(board, y), x)
+  end
+
+  def overlay(moves, board, fog) do
     n = length(board)
 
     Enum.map(0..(n - 1), fn y ->
       Enum.reduce(0..(n - 1), "", fn x, acc ->
-        acc <> overlay_string(moves, board, fog, {y, x})
+        acc <> overlay(moves, board, fog, {y, x})
       end)
     end)
   end
 
-  def index_string(board, {y, x}) do
-    String.at(Enum.at(board, y), x)
-  end
-
-  def overlay_string(moves, board, fog, {y, x}) do
-    if Enum.member?(moves, {y, x}) do
-      case index_string(board, {y, x}) do
+  def overlay(moves, board, fog, move) do
+    if Enum.member?(moves, move) do
+      case cell(board, move) do
         "." ->
           "*"
 
@@ -44,7 +45,7 @@ defmodule Battleship do
           "#"
       end
     else
-      (fog && "~") || index_string(board, {y, x})
+      (fog && "~") || cell(board, move)
     end
   end
 
@@ -57,7 +58,7 @@ defmodule Battleship do
 
   def draw_state(state) do
     {p1, p2} = {Enum.take_every(state.moves, 2), Enum.drop_every(state.moves, 2)}
-    [b1, b2] = state.boards
+    {b1, b2} = state.boards
 
     player = active_player(state)
 
@@ -70,18 +71,27 @@ defmodule Battleship do
   def process_turn(state) do
     draw_state(state)
 
-    player = active_player(state) |> to_string()
+    player = active_player(state)
 
-    input = IO.gets("Player " <> player <> " move: ") |> String.upcase()
+    input = IO.gets("Player " <> to_string(player) <> " move: ") |> String.upcase()
 
     # player input validation
     if String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
       {row, col} = String.split_at(input, 1)
 
-      {y, x} =
+      move =
         {:binary.first(row) - 65, (String.trim(col) |> String.to_integer()) - 1}
 
-      state = update_in(state.moves, &(&1 ++ [{y, x}]))
+      result =
+        case cell(elem(state.boards, Integer.mod(player, 2)), move) do
+          "." -> "MISS"
+          _ -> "HIT"
+        end
+
+      IO.puts(result)
+
+      state = update_in(state.moves, &(&1 ++ [move]))
+
       process_turn(state)
     else
       IO.puts("Invalid move - Try again")
