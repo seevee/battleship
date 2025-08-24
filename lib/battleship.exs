@@ -1,6 +1,6 @@
 defmodule Battleship do
-  def parse_move(move) do
-    move
+  def parse_shot(shot) do
+    shot
     |> String.split()
     |> Enum.map(&String.to_integer/1)
     |> List.to_tuple()
@@ -17,30 +17,30 @@ defmodule Battleship do
       |> List.first()
       |> String.length()
 
-    {boards, moves} = Enum.split(file, 2 * n + 1)
+    {boards, shots} = Enum.split(file, 2 * n + 1)
 
     %{
       boards: [
         Enum.take(boards, n),
         Enum.take(boards, -n)
       ],
-      moves:
-        moves
-        |> Enum.reduce([], fn move, acc -> [parse_move(move) | acc] end)
+      shots:
+        shots
+        |> Enum.reduce([], fn shot, acc -> [parse_shot(shot) | acc] end)
         |> Enum.reverse(),
       file_path: file_path
     }
   end
 
-  def player_moves(state) do
+  def player_shots(state) do
     [
-      Enum.take_every(state.moves, 2),
-      Enum.drop_every(state.moves, 2)
+      Enum.take_every(state.shots, 2),
+      Enum.drop_every(state.shots, 2)
     ]
   end
 
   def active_player(state) do
-    state.moves |> length() |> Integer.mod(2) |> Kernel.+(1)
+    state.shots |> length() |> Integer.mod(2) |> Kernel.+(1)
   end
 
   def cell(board, {y, x}) do
@@ -62,20 +62,17 @@ defmodule Battleship do
     format_string(str, {4, 3, 3}, {0, 0, 1})
   end
 
-  def overlay(moves, board, fog, move) do
-    char = cell(board, move)
+  def overlay(shots, board, fog, position) do
+    char = cell(board, position)
 
-    if move in moves do
-      case char do
-        "." -> fmt("*", :miss)
-        _ -> fmt(char, :hit)
-      end
-    else
-      (fog && "~") || char
+    cond do
+      position not in shots -> (fog && "~") || char
+      char in ["."] -> fmt("*", :miss)
+      true -> fmt(char, :hit)
     end
   end
 
-  def overlay(moves, board, fog) do
+  def overlay(shots, board, fog) do
     range =
       board
       |> length()
@@ -84,13 +81,13 @@ defmodule Battleship do
 
     Enum.map(range, fn y ->
       Enum.reduce(range, "", fn x, acc ->
-        acc <> overlay(moves, board, fog, {y, x})
+        acc <> overlay(shots, board, fog, {y, x})
       end)
     end)
   end
 
   def draw(state) do
-    [p1, p2] = player_moves(state)
+    [p1, p2] = player_shots(state)
     [b1, b2] = state.boards
     [f1, f2] = state |> active_player() |> then(&[&1 != 1, &1 != 2])
 
@@ -104,6 +101,36 @@ defmodule Battleship do
     end)
   end
 
+  def process_shot(state, player, input) do
+    {row, col} = String.split_at(input, 1)
+
+    shot =
+      {
+        :binary.first(row) - 65,
+        col |> String.trim() |> String.to_integer() |> Kernel.-(1)
+      }
+
+    previous_shots = state |> player_shots() |> Enum.at(player - 1)
+
+    if shot in previous_shots do
+      IO.puts("Shot already taken - Try again")
+      state
+    else
+      enemy_index = Integer.mod(player, 2)
+
+      state.boards
+      |> Enum.at(enemy_index)
+      |> cell(shot)
+      |> case do
+        "." -> fmt("MISS", :miss)
+        _ -> fmt("HIT", :hit)
+      end
+      |> IO.puts()
+
+      update_in(state.shots, &(&1 ++ [shot]))
+    end
+  end
+
   def process_turn(state \\ load_state()) do
     draw(state)
 
@@ -112,47 +139,17 @@ defmodule Battleship do
     input =
       player
       |> to_string
-      |> then(&"Player #{&1} move: ")
+      |> then(&"Player #{&1} shot: ")
       |> IO.gets()
       |> String.upcase()
 
     IO.puts(IO.ANSI.clear())
 
-    # player input validation
-    if String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
-      {row, col} = String.split_at(input, 1)
-
-      move =
-        {
-          :binary.first(row) - 65,
-          col |> String.trim() |> String.to_integer() |> Kernel.-(1)
-        }
-
-      previous_moves = state |> player_moves() |> Enum.at(player - 1)
-
-      cond do
-        move in previous_moves ->
-          IO.puts("Move already made - Try again")
-          process_turn(state)
-
-        true ->
-          enemy_index = Integer.mod(player, 2)
-
-          state.boards
-          |> Enum.at(enemy_index)
-          |> cell(move)
-          |> case do
-            "." -> fmt("MISS", :miss)
-            _ -> fmt("HIT", :hit)
-          end
-          |> IO.puts()
-
-          state = update_in(state.moves, &(&1 ++ [move]))
-          process_turn(state)
-      end
-    else
-      IO.puts("Invalid move - Try again")
+    if !String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
+      IO.puts("Invalid shot - Try again")
       process_turn(state)
+    else
+      state |> process_shot(player, input) |> process_turn()
     end
   end
 end
