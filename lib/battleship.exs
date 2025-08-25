@@ -1,4 +1,10 @@
 defmodule Battleship do
+  def parse_shots(shots) do
+    shots
+    |> Enum.reduce([], fn shot, acc -> [parse_shot(shot) | acc] end)
+    |> Enum.reverse()
+  end
+
   def parse_shot(shot) do
     shot
     |> String.split()
@@ -17,18 +23,21 @@ defmodule Battleship do
       |> List.first()
       |> String.length()
 
-    {boards, shots} = Enum.split(file, 2 * n + 1)
+    {boards, shots} =
+      file
+      |> Enum.split(2 * n)
+      |> then(fn {b, s} ->
+        {
+          [Enum.take(b, n), Enum.take(b, -n)],
+          parse_shots(s)
+        }
+      end)
 
     %{
-      boards: [
-        Enum.take(boards, n),
-        Enum.take(boards, -n)
-      ],
-      shots:
-        shots
-        |> Enum.reduce([], fn shot, acc -> [parse_shot(shot) | acc] end)
-        |> Enum.reverse(),
-      file_path: file_path
+      boards: boards,
+      shots: shots,
+      file_path: file_path,
+      active_player: shots |> length() |> Integer.mod(2) |> Kernel.+(1)
     }
   end
 
@@ -37,10 +46,6 @@ defmodule Battleship do
       Enum.take_every(state.shots, 2),
       Enum.drop_every(state.shots, 2)
     ]
-  end
-
-  def active_player(state) do
-    state.shots |> length() |> Integer.mod(2) |> Kernel.+(1)
   end
 
   def cell(board, {y, x}) do
@@ -89,7 +94,7 @@ defmodule Battleship do
   def draw(state) do
     [p1, p2] = player_shots(state)
     [b1, b2] = state.boards
-    [f1, f2] = state |> active_player() |> then(&[&1 != 1, &1 != 2])
+    [f1, f2] = [state.active_player != 1, state.active_player != 2]
 
     overlays = [
       overlay(p2, b1, f1),
@@ -101,7 +106,7 @@ defmodule Battleship do
     end)
   end
 
-  def process_shot(state, player, input) do
+  def process_shot(state, input) do
     {row, col} = String.split_at(input, 1)
 
     shot =
@@ -110,13 +115,13 @@ defmodule Battleship do
         col |> String.trim() |> String.to_integer() |> Kernel.-(1)
       }
 
-    previous_shots = state |> player_shots() |> Enum.at(player - 1)
+    previous_shots = state |> player_shots() |> Enum.at(state.active_player - 1)
 
     if shot in previous_shots do
       IO.puts("Shot already taken - Try again")
-      state
+      process_input(state)
     else
-      enemy_index = Integer.mod(player, 2)
+      enemy_index = Integer.mod(state.active_player, 2)
 
       state.boards
       |> Enum.at(enemy_index)
@@ -131,26 +136,29 @@ defmodule Battleship do
     end
   end
 
-  def process_turn(state \\ load_state()) do
-    draw(state)
-
-    player = active_player(state)
-
+  def process_input(state) do
     input =
-      player
-      |> to_string
+      state.active_player
+      |> to_string()
       |> then(&"Player #{&1} shot: ")
       |> IO.gets()
       |> String.upcase()
 
-    IO.puts(IO.ANSI.clear())
-
     if !String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
       IO.puts("Invalid shot - Try again")
-      process_turn(state)
+      process_input(state)
     else
-      state |> process_shot(player, input) |> process_turn()
+      process_shot(state, input)
     end
+  end
+
+  def process_turn(state \\ load_state()) do
+    draw(state)
+
+    state
+    |> process_input()
+    |> Map.replace(:active_player, Integer.mod(state.active_player, 2) + 1)
+    |> process_turn()
   end
 end
 
