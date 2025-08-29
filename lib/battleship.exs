@@ -1,15 +1,21 @@
 defmodule Battleship do
-  def parse_shots(shots) do
-    shots
-    |> Enum.reduce([], fn shot, acc -> [parse_shot(shot) | acc] end)
-    |> Enum.reverse()
-  end
-
-  def parse_shot(shot) do
-    shot
+  def parse(raw_shot) when is_binary(raw_shot) do
+    raw_shot
     |> String.split()
     |> Enum.map(&String.to_integer/1)
     |> List.to_tuple()
+  end
+
+  def parse(raw_shots) when is_list(raw_shots) do
+    raw_shots
+    |> Enum.reduce([], fn shot, acc -> [parse(shot) | acc] end)
+    |> Enum.reverse()
+    |> then(fn shots ->
+      %{
+        1 => Enum.take_every(shots, 2),
+        2 => Enum.drop_every(shots, 2)
+      }
+    end)
   end
 
   def load_state(file_path \\ "state.txt") do
@@ -23,29 +29,14 @@ defmodule Battleship do
       |> List.first()
       |> String.length()
 
-    {boards, shots} =
-      file
-      |> Enum.split(2 * n)
-      |> then(fn {b, s} ->
-        {
-          [Enum.take(b, n), Enum.take(b, -n)],
-          parse_shots(s)
-        }
-      end)
+    {raw_boards, raw_shots} = Enum.split(file, 2 * n)
 
     %{
-      boards: boards,
-      shots: shots,
+      boards: raw_boards |> Enum.split(n) |> Tuple.to_list(),
+      shots: parse(raw_shots),
       file_path: file_path,
-      active_player: shots |> length() |> Integer.mod(2) |> Kernel.+(1)
+      active_player: raw_shots |> length() |> Integer.mod(2) |> Kernel.+(1)
     }
-  end
-
-  def player_shots(state) do
-    [
-      Enum.take_every(state.shots, 2),
-      Enum.drop_every(state.shots, 2)
-    ]
   end
 
   def cell(board, {y, x}) do
@@ -78,11 +69,7 @@ defmodule Battleship do
   end
 
   def overlay(shots, board, fog) do
-    range =
-      board
-      |> length()
-      |> Kernel.-(1)
-      |> then(&(0..&1))
+    range = 0..(length(board) - 1)
 
     Enum.map(range, fn y ->
       Enum.reduce(range, "", fn x, acc ->
@@ -92,72 +79,71 @@ defmodule Battleship do
   end
 
   def draw(state) do
-    [p1, p2] = player_shots(state)
     [b1, b2] = state.boards
     [f1, f2] = [state.active_player != 1, state.active_player != 2]
 
     overlays = [
-      overlay(p2, b1, f1),
-      overlay(p1, b2, f2)
+      overlay(state.shots[2], b1, f1),
+      overlay(state.shots[1], b2, f2)
     ]
 
     Enum.zip_with(overlays, fn [o1_line, o2_line] ->
       IO.puts(o1_line <> " " <> o2_line)
     end)
+
+    state
   end
 
-  def process_shot(state, input) do
-    {row, col} = String.split_at(input, 1)
+  def process_shot(state) do
+    enemy_index = Integer.mod(state.active_player, 2)
+    shot = List.last(state.shots[state.active_player])
 
-    shot =
-      {
-        :binary.first(row) - 65,
-        col |> String.trim() |> String.to_integer() |> Kernel.-(1)
-      }
-
-    previous_shots = state |> player_shots() |> Enum.at(state.active_player - 1)
-
-    if shot in previous_shots do
-      IO.puts("Shot already taken - Try again")
-      process_input(state)
-    else
-      enemy_index = Integer.mod(state.active_player, 2)
-
-      state.boards
-      |> Enum.at(enemy_index)
-      |> cell(shot)
-      |> case do
-        "." -> fmt("MISS", :miss)
-        _ -> fmt("HIT", :hit)
-      end
-      |> IO.puts()
-
-      update_in(state.shots, &(&1 ++ [shot]))
+    state.boards
+    |> Enum.at(enemy_index)
+    |> cell(shot)
+    |> case do
+      "." -> fmt("MISS", :miss)
+      _ -> fmt("HIT", :hit)
     end
+    |> IO.puts()
+
+    Map.replace(state, :active_player, enemy_index + 1)
   end
 
   def process_input(state) do
-    input =
+    raw_input =
       state.active_player
       |> to_string()
       |> then(&"Player #{&1} shot: ")
       |> IO.gets()
       |> String.upcase()
 
-    if !String.match?(input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) do
-      IO.puts("Invalid shot - Try again")
-      process_input(state)
-    else
-      process_shot(state, input)
+    {row, col} = String.split_at(raw_input, 1)
+
+    shot = {
+      :binary.first(row) - 65,
+      col |> String.trim() |> String.to_integer() |> Kernel.-(1)
+    }
+
+    cond do
+      !String.match?(raw_input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) ->
+        IO.puts("Invalid shot - Try again")
+        process_input(state)
+
+      shot in state.shots[state.active_player] ->
+        IO.puts("Shot already taken - Try again")
+        process_input(state)
+
+      true ->
+        update_in(state.shots[state.active_player], &(&1 ++ [shot]))
     end
   end
 
   def process_turn(state \\ load_state()) do
-    draw(state)
-
     state
+    |> draw()
     |> process_input()
-    |> Map.replace(:active_player, Integer.mod(state.active_player, 2) + 1)
+    |> process_shot()
     |> process_turn()
   end
 end
