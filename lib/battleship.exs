@@ -1,12 +1,12 @@
 defmodule Battleship do
-  def parse(raw_shot) when is_binary(raw_shot) do
+  defp parse(raw_shot) when is_binary(raw_shot) do
     raw_shot
     |> String.split()
     |> Enum.map(&String.to_integer/1)
     |> List.to_tuple()
   end
 
-  def parse(raw_shots) when is_list(raw_shots) do
+  defp parse(raw_shots) when is_list(raw_shots) do
     raw_shots
     |> Enum.reduce([], fn shot, acc -> [parse(shot) | acc] end)
     |> Enum.reverse()
@@ -18,7 +18,7 @@ defmodule Battleship do
     end)
   end
 
-  def load_state(file_path \\ "state.txt") do
+  defp load_state(file_path \\ "state.txt") do
     file =
       file_path
       |> File.stream!()
@@ -39,36 +39,36 @@ defmodule Battleship do
     }
   end
 
-  def cell(board, {y, x}) do
+  defp cell(board, {y, x}) do
     board |> Enum.at(y) |> String.at(x)
   end
 
-  def format_string(str, {r1, g1, b1}, {r2, g2, b2}) do
+  defp format_string(str, {r1, g1, b1}, {r2, g2, b2}) do
     IO.ANSI.color(r1, g1, b1) <>
       IO.ANSI.color_background(r2, g2, b2) <>
       str <>
       IO.ANSI.reset()
   end
 
-  def fmt(str, mode) when mode === :hit do
+  defp fmt(str, mode) when mode === :hit do
     format_string(str, {4, 4, 0}, {3, 0, 0})
   end
 
-  def fmt(str, mode) when mode === :miss do
+  defp fmt(str, mode) when mode === :miss do
     format_string(str, {4, 3, 3}, {0, 0, 1})
   end
 
-  def overlay(shots, board, fog, position) do
-    char = cell(board, position)
+  defp overlay(shots, board, fog, {y, x}) do
+    char = cell(board, {y, x})
 
     cond do
-      position not in shots -> (fog && "~") || char
+      {y, x} not in shots -> (fog && "~") || char
       char in ["."] -> fmt("*", :miss)
       true -> fmt(char, :hit)
     end
   end
 
-  def overlay(shots, board, fog) do
+  defp overlay(shots, board, fog) do
     range = 0..(length(board) - 1)
 
     Enum.map(range, fn y ->
@@ -78,7 +78,7 @@ defmodule Battleship do
     end)
   end
 
-  def draw(state) do
+  defp draw(state) do
     [b1, b2] = state.boards
     [f1, f2] = [state.active_player != 1, state.active_player != 2]
 
@@ -94,31 +94,15 @@ defmodule Battleship do
     state
   end
 
-  def process_shot(state) do
-    enemy_index = Integer.mod(state.active_player, 2)
-    shot = List.last(state.shots[state.active_player])
-
-    state.boards
-    |> Enum.at(enemy_index)
-    |> cell(shot)
-    |> case do
-      "." -> fmt("MISS", :miss)
-      _ -> fmt("HIT", :hit)
-    end
-    |> IO.puts()
-
-    Map.replace(state, :active_player, enemy_index + 1)
-  end
-
-  def process_input(state) do
-    raw_input =
+  defp process_input(state) do
+    upcase_input =
       state.active_player
       |> to_string()
       |> then(&"Player #{&1} shot: ")
       |> IO.gets()
       |> String.upcase()
 
-    {row, col} = String.split_at(raw_input, 1)
+    {row, col} = String.split_at(upcase_input, 1)
 
     shot = {
       :binary.first(row) - 65,
@@ -126,7 +110,7 @@ defmodule Battleship do
     }
 
     cond do
-      !String.match?(raw_input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) ->
+      !String.match?(upcase_input, ~r/^([A-J]+\s*\(?\)?)\s*([1-9]|10)$/) ->
         IO.puts("Invalid shot - Try again")
         process_input(state)
 
@@ -139,11 +123,32 @@ defmodule Battleship do
     end
   end
 
+  defp process_shot(state) do
+    enemy_index = Integer.mod(state.active_player, 2)
+    enemy_board = Enum.at(state.boards, enemy_index)
+    shot = List.last(state.shots[state.active_player])
+
+    result =
+      case cell(enemy_board, shot) do
+        "." -> fmt("MISS", :miss)
+        _ -> fmt("HIT", :hit)
+      end
+
+    IO.puts(result)
+    state
+  end
+
+  defp switch_player(state) do
+    enemy_index = Integer.mod(state.active_player, 2)
+    Map.replace(state, :active_player, enemy_index + 1)
+  end
+
   def process_turn(state \\ load_state()) do
     state
     |> draw()
     |> process_input()
     |> process_shot()
+    |> switch_player()
     |> process_turn()
   end
 end
